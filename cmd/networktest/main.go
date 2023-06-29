@@ -20,7 +20,6 @@ func main() {
 	// TODO: add a verbose option instead of log
 	// TODO: improve file argument handling
 	// TODO: add server logging
-	// TODO: add name for this machine
 	// TODO: add prometheus logging handler
 	// TODO: improving config handling
 	// TODO: trying building on tubular
@@ -49,6 +48,7 @@ func main() {
 		handlers = append(handlers, check.FileWriter(*outPtr))
 	}
 	handlers = append(handlers, check.LogSummary(10.0))
+	handlers = append(handlers, check.Prometheus(1781))
 
 	go check.CheckHosts(hostsToUse, *portPtr, 1000, *resolvePtr, handlers)
 

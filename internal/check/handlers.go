@@ -3,8 +3,13 @@ package check
 import (
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type HandlerCallback func(<-chan TestStatus)
@@ -81,6 +86,40 @@ func LogSummary(interval float64) HandlerCallback {
 				}
 
 				lastTime = time.Now()
+			}
+		}
+	}
+}
+
+func Prometheus(port int) HandlerCallback {
+
+	failCounter := promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "networktest_connection_fail_total",
+			Help: "Total number of failed connections attempts.",
+		},
+		[]string{"source", "dest"},
+	)
+
+	totalCounter := promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "networktest_connection_attempts_total",
+			Help: "Total number of connections attempts.",
+		},
+		[]string{"source", "dest"},
+	)
+
+	return func(ch <-chan TestStatus) {
+
+		http.Handle("/metrics", promhttp.Handler())
+		go http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
+
+		for status := range ch {
+
+			totalCounter.WithLabelValues(status.Source, status.Dest).Inc()
+
+			if status.Status != StatusSuccess {
+				failCounter.WithLabelValues(status.Source, status.Dest).Inc()
 			}
 		}
 	}
