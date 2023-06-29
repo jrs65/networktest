@@ -11,10 +11,11 @@ import (
 
 type StatusCode int
 
+// Define the test status
 const (
-	StatusSuccess StatusCode = iota
-	StatusTimeout
-	StatusFail
+	StatusSuccess StatusCode = iota // Everything worked
+	StatusTimeout                   // There was a timeout
+	StatusFail                      // Some other failure happened
 )
 
 var Hosts map[string]string
@@ -90,6 +91,10 @@ func checkHost(dest TestHost, source string, handlerChannels [](chan<- TestStatu
 	}
 }
 
+// Check that we can connect to the given list of `hosts` on `port`.
+// If `resolve` then try to pre-resolve the names to IP addresses to avoid DNS queries
+// on every connection attempt
+// The results of each test are passed to each element of `handlers` via a channel.
 func CheckHosts(
 	hosts []string, port int, interval_ms int, resolve bool,
 	handlers []HandlerCallback,
