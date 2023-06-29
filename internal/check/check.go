@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -37,27 +38,34 @@ type TestStatus struct {
 	Completed time.Time
 }
 
-// Connect to the given host:port and return the results on the channel
-func checkHost(name string, host string, port int, handlerChannels [](chan<- TestStatus)) {
+// Where should we connect to
+type TestHost struct {
 
-	// Try to get the host from a pre-resolved map, otherwise just use the given name
-	// and hope it works fine
-	resolved_host, ok := Hosts[host]
-	if !ok {
-		resolved_host = host
-	}
+	// The name of the destination (not necessarily the actual hostname)
+	Name string
 
-	// Dummy operation for the call
-	url := fmt.Sprintf("http://%s:%d/", resolved_host, port)
-	// time.Sleep(800 * time.Millisecond)
-	// fmt.Println(url, time.Now())
+	// The actual host to connect to. This could be a hostname, or an IP address
+	Host string
+
+	// The port to connect to
+	Port int
+}
+
+// Construct the URL to connect to
+func (t TestHost) Url() string {
+	return fmt.Sprintf("http://%s:%d/", t.Host, t.Port)
+}
+
+// Connect to the given destination and pass the results to the handlers
+// source is the name to use for the origin (i.e this machine)
+func checkHost(dest TestHost, source string, handlerChannels [](chan<- TestStatus)) {
 
 	// Connect to the server, force a new connection each time
 	t := http.DefaultTransport.(*http.Transport).Clone()
 	t.MaxIdleConnsPerHost = -1
 	startTime := time.Now()
 	client := &http.Client{Timeout: 10 * time.Second, Transport: t}
-	_, err := client.Get(url)
+	_, err := client.Get(dest.Url())
 	endTime := time.Now()
 
 	elapsed := float32(endTime.Sub(startTime).Seconds())
@@ -74,7 +82,7 @@ func checkHost(name string, host string, port int, handlerChannels [](chan<- Tes
 	}
 
 	// Create the status entry and return it
-	s := TestStatus{"me", name, status, elapsed, endTime}
+	s := TestStatus{source, dest.Name, status, elapsed, endTime}
 
 	// Push the status to all listening handlers
 	for _, channel := range handlerChannels {
@@ -87,28 +95,26 @@ func CheckHosts(
 	handlers []HandlerCallback,
 ) {
 
-	urlHosts := make([]string, len(hosts))
+	testHosts := make([]TestHost, len(hosts))
 
 	for i, host := range hosts {
 
-		var address string
-		if host == "localhost" {
-			address = "127.0.0.1"
-		} else {
-			addresses, err := net.LookupHost(host)
+		addresses, err := net.LookupHost(host)
 
-			if err != nil {
-				log.Fatal(err)
-			} else if len(addresses) == 0 {
-				log.Fatalf("No address for host %s", host)
-			}
-			address = addresses[0]
+		if err != nil {
+			log.Fatal(err)
+		} else if len(addresses) == 0 {
+			log.Fatalf("No address for host %s", host)
 		}
 
+		testHosts[i].Name = host
+		testHosts[i].Port = port
+
 		if resolve {
-			urlHosts[i] = address
+			log.Printf("resolved host %s to %s", host, addresses[0])
+			testHosts[i].Host = addresses[0]
 		} else {
-			urlHosts[i] = host
+			testHosts[i].Host = host
 		}
 	}
 
@@ -120,9 +126,15 @@ func CheckHosts(
 		go handler(c)
 	}
 
+	// Get the local hostname to label the test origin
+	me, err := os.Hostname()
+	if err != nil {
+		me = "me"
+	}
+
 	for {
-		for i, host := range hosts {
-			go checkHost(host, urlHosts[i], port, handlerChannels)
+		for _, t := range testHosts {
+			go checkHost(t, me, handlerChannels)
 		}
 		time.Sleep(time.Duration(interval_ms) * time.Millisecond)
 	}
