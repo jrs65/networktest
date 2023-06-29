@@ -36,7 +36,7 @@ type TestStatus struct {
 	Elapsed float32
 
 	// The actual time the test finished
-	Completed time.Time
+	StartTime time.Time
 }
 
 // Where should we connect to
@@ -83,7 +83,7 @@ func checkHost(dest TestHost, source string, handlerChannels [](chan<- TestStatu
 	}
 
 	// Create the status entry and return it
-	s := TestStatus{source, dest.Name, status, elapsed, endTime}
+	s := TestStatus{source, dest.Name, status, elapsed, startTime}
 
 	// Push the status to all listening handlers
 	for _, channel := range handlerChannels {
@@ -96,7 +96,7 @@ func checkHost(dest TestHost, source string, handlerChannels [](chan<- TestStatu
 // on every connection attempt
 // The results of each test are passed to each element of `handlers` via a channel.
 func CheckHosts(
-	hosts []string, port int, interval_ms int, resolve bool,
+	hosts []string, port int, interval time.Duration, resolve bool,
 	handlers []HandlerCallback,
 ) {
 
@@ -141,6 +141,6 @@ func CheckHosts(
 		for _, t := range testHosts {
 			go checkHost(t, me, handlerChannels)
 		}
-		time.Sleep(time.Duration(interval_ms) * time.Millisecond)
+		time.Sleep(interval)
 	}
 }

@@ -28,7 +28,7 @@ func LogVerbose() HandlerCallback {
 				statusString = "FAILURE"
 			}
 			log.Printf(
-				"%10s <-> %-10s %s in %.1f ms",
+				"test: %10s -> %-10s %s in %.1f ms",
 				status.Source, status.Dest, statusString, 1000*status.Elapsed,
 			)
 		}
@@ -52,7 +52,7 @@ func FileWriter(filename string) HandlerCallback {
 			fmt.Fprintf(
 				file,
 				"%s %15s %15s %15d %10.1f\n",
-				status.Completed.Format(time.RFC3339),
+				status.StartTime.Format(time.RFC3339),
 				status.Source, status.Dest, status.Status, 1000*status.Elapsed,
 			)
 		}
@@ -60,7 +60,7 @@ func FileWriter(filename string) HandlerCallback {
 }
 
 // Write a summary out to the log every `interval` seconds
-func LogSummary(interval float64) HandlerCallback {
+func LogSummary(interval time.Duration) HandlerCallback {
 
 	failCounts := make(map[string]int)
 	totalCounts := make(map[string]int)
@@ -77,10 +77,10 @@ func LogSummary(interval float64) HandlerCallback {
 			}
 
 			// Print out all the counts if we're at a multiple of 10 tests
-			if time.Since(lastTime).Seconds() > interval {
+			if time.Since(lastTime) > interval {
 				for dest := range totalCounts {
 					log.Printf(
-						"%s %d/%d failures",
+						"summary: %s %d/%d failures",
 						dest, failCounts[dest], totalCounts[dest],
 					)
 				}
