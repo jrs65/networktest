@@ -1,3 +1,3 @@
 module github.com/jrs65/networktest
 
-go 1.20
+go 1.18
