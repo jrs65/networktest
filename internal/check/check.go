@@ -33,7 +33,7 @@ type TestStatus struct {
 	Status StatusCode
 
 	// The amount of time elapsed
-	Elapsed float32
+	Elapsed time.Duration
 
 	// The actual time the test finished
 	StartTime time.Time
@@ -69,7 +69,7 @@ func checkHost(dest TestHost, source string, handlerChannels [](chan<- TestStatu
 	_, err := client.Get(dest.Url())
 	endTime := time.Now()
 
-	elapsed := float32(endTime.Sub(startTime).Seconds())
+	elapsed := endTime.Sub(startTime)
 
 	var status StatusCode
 	if err, ok := err.(net.Error); ok && err.Timeout() {

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
@@ -29,7 +28,8 @@ func LogVerbose() HandlerCallback {
 			}
 			log.Printf(
 				"test: %10s -> %-10s %s in %.1f ms",
-				status.Source, status.Dest, statusString, 1000*status.Elapsed,
+				status.Source, status.Dest, statusString,
+				1000*status.Elapsed.Seconds(),
 			)
 		}
 	}
@@ -53,7 +53,8 @@ func FileWriter(filename string) HandlerCallback {
 				file,
 				"%s %15s %15s %15d %10.1f\n",
 				status.StartTime.Format(time.RFC3339),
-				status.Source, status.Dest, status.Status, 1000*status.Elapsed,
+				status.Source, status.Dest, status.Status,
+				1000*status.Elapsed.Seconds(),
 			)
 		}
 	}
@@ -93,34 +94,53 @@ func LogSummary(interval time.Duration) HandlerCallback {
 
 func Prometheus(port int) HandlerCallback {
 
-	failCounter := promauto.NewCounterVec(
+	connectionCounter := prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "networktest_connection_fail_total",
-			Help: "Total number of failed connections attempts.",
-		},
-		[]string{"source", "dest"},
-	)
-
-	totalCounter := promauto.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "networktest_connection_attempts_total",
+			Name: "networktest_connection_total",
 			Help: "Total number of connections attempts.",
 		},
-		[]string{"source", "dest"},
+		[]string{"src", "dest", "status"},
 	)
+
+	connectionTimeCounter := prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "networktest_connection_seconds_total",
+			Help: "Total length of time spent in connection tests.",
+		},
+		[]string{"src", "dest", "status"},
+	)
+
+	promReg := prometheus.NewRegistry()
+	promReg.MustRegister(connectionCounter)
+	promReg.MustRegister(connectionTimeCounter)
+
+	handler := promhttp.HandlerFor(
+		promReg,
+		promhttp.HandlerOpts{
+			EnableOpenMetrics: false,
+		})
 
 	return func(ch <-chan TestStatus) {
 
-		http.Handle("/metrics", promhttp.Handler())
+		http.Handle("/metrics", handler)
 		go http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
 
 		for status := range ch {
 
-			totalCounter.WithLabelValues(status.Source, status.Dest).Inc()
-
-			if status.Status != StatusSuccess {
-				failCounter.WithLabelValues(status.Source, status.Dest).Inc()
+			var statusString string
+			if status.Status == StatusSuccess {
+				statusString = "success"
+			} else {
+				statusString = "failure"
 			}
+
+			connectionCounter.WithLabelValues(
+				status.Source, status.Dest, statusString,
+			).Inc()
+
+			connectionTimeCounter.WithLabelValues(
+				status.Source, status.Dest, statusString,
+			).Add(status.Elapsed.Seconds())
 		}
 	}
 }
